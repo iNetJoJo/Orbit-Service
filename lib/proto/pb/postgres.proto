@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package orbit;
+
+service PostGres {
+    rpc DBCall(DBCallRequest) returns (DBCallResponse){}
+}
+
+message DBCallRequest{
+    string payload = 1;
+}
+
+message DBCallResponse{
+    bytes payload = 1;
+}
