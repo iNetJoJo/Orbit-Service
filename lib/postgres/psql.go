@@ -3,35 +3,36 @@ package orbitpsql
 import (
 	pb "Orbit-Service/lib/proto/generated"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/jackc/pgx"
+	"github.com/jinzhu/gorm"
+	_ "github.com/jinzhu/gorm/dialects/postgres"
 )
 
-// DBPsql defines an object holding postgres related connection attributes
-type DBPsql struct {
-	conn *pgx.Conn
+// OrbitPSQL defines an object holding postgres related connection attributes
+type OrbitPSQL struct {
+	conn *gorm.DB
 }
 
 // Connect implements a functon for connecting to postgres database
-func (db *DBPsql) Connect(DBaddress, DBuser, DBpassword, DBName, DBSSL string, DBport int) (*DBPsql, error) {
-	ctx := context.Background()
+func (db *OrbitPSQL) Connect(DBaddress, DBuser, DBpassword, DBName, DBSSL string, DBport int) (*OrbitPSQL, error) {
 
 	connString := db.genConnectionString(DBaddress, DBuser, DBpassword, DBName, DBSSL, DBport)
 
-	conn, err := pgx.Connect(ctx, connString)
+	conn, err := gorm.Open("postgres", connString)
 	if err != nil {
 		return nil, err
 	}
 
-	return &DBPsql{conn: conn}, nil
+	return &OrbitPSQL{conn: conn}, nil
 }
 
-func (db *DBPsql) genConnectionString(DBaddress, DBuser, DBpassword, DBName, DBSSL string, DBport int) string {
+func (db *OrbitPSQL) genConnectionString(DBaddress, DBuser, DBpassword, DBName, DBSSL string, DBport int) string {
 	return fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=%s",
 		DBuser,
 		DBpassword,
@@ -41,24 +42,26 @@ func (db *DBPsql) genConnectionString(DBaddress, DBuser, DBpassword, DBName, DBS
 		DBSSL)
 }
 
-func (db *DBPsql) genStoredProcedureCall(call string) string {
+func (db *OrbitPSQL) genStoredProcedureCall(call string) string {
 	return "exec " + call
 }
 
 //DBCall implements generic grpc call related to postgres database call
-func (db *DBPsql) DBCall(ctx context.Context, in *pb.DBCallRequest) (*pb.DBCallResponse, error) {
-
-	var result map[string]interface{}
-
-	rows, err := db.conn.Query(ctx, db.genStoredProcedureCall(in.Payload))
+func (db *OrbitPSQL) DBCall(ctx context.Context, in *pb.DBCallRequest) (*pb.DBCallResponse, error) {
+	rows, err := db.conn.Raw(db.genStoredProcedureCall(in.Payload)).Rows()
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	return &pb.DBCallResponse{Payload: []byte("test")}, nil
+	result, err := PgSqlRowsToJson(rows)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	return &pb.DBCallResponse{Payload: result}, nil
 }
 
-func PgSqlRowsToJson(rows *pgx.Rows) ([]byte, error) {
+func PgSqlRowsToJson(rows *sql.Rows) ([]byte, error) {
 	columns, err := rows.Columns()
 	if err != nil {
 		return nil, err

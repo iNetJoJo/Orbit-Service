@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package orbit;
+package orbitpsql_pb;
 
 service PostGres {
     rpc DBCall(DBCallRequest) returns (DBCallResponse){}
